@@ -17,7 +17,7 @@ jobs:
           repository: maurosoria/dirsearch # 指定要检出的仓库
           ref: master # 检出master分支
           path: dirsearch # 将代码检出到当前工作目录下的dirsearch文件夹中
-          #token: ${{ secrets.GITHUB_TOKEN }} # 如果仓库是私有的，需要提供认证令牌
+          # token: ${{ secrets.GITHUB_TOKEN }} # 如果仓库是私有的，需要提供认证令牌
 
       - name: 设置Python环境
         uses: actions/setup-python@v3 # 使用GitHub提供的设置Python环境的Action
@@ -54,8 +54,8 @@ jobs:
           ip_list="${{ steps.generate-ip-list.outputs.ip_list }}" # 获取上一步生成的IP列表
           for ip in $ip_list; do # 遍历IP列表中的每个IP地址
             echo "正在扫描 $ip..." # 输出正在扫描的IP地址信息
-            # 对每个IP地址运行Dirsearch进行扫描，使用随机User-Agent，设置请求延迟和重试次数
-            python3 dirsearch.py -u "http://$ip" -e * --random-agent --delay=10 --retries=3 || true
+            # 对每个IP地址运行Dirsearch进行扫描，明确指定要扫描的文件扩展名
+            python3 dirsearch.py -u "http://$ip" -e php,aspx,jsp,html,js --random-agent --delay=10 --retries=3 || true
             # 使用|| true确保即使扫描失败，脚本也会继续执行
           done
 
