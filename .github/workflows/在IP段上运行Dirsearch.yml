@@ -17,7 +17,7 @@ jobs:
           repository: maurosoria/dirsearch # 指定要检出的仓库
           ref: master # 检出master分支
           path: dirsearch # 将代码检出到当前工作目录下的dirsearch文件夹中
-          token: ${{ secrets.GITHUB_TOKEN }} # 如果仓库是私有的，需要提供认证令牌
+          #token: ${{ secrets.GITHUB_TOKEN }} # 如果仓库是私有的，需要提供认证令牌
 
       - name: 设置Python环境
         uses: actions/setup-python@v3 # 使用GitHub提供的设置Python环境的Action
