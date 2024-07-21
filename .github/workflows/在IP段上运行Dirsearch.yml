@@ -48,10 +48,21 @@ jobs:
           ips=$(python -c "import ipaddress; ip_range = ipaddress.ip_network('${ip_range}', strict=False); print(' '.join(str(ip) for ip in ip_range.hosts()))")
           echo "::set-output name=ip_list::$ips" # 将生成的IP列表作为此步骤的输出
 
+      - name: 过滤可达IP地址
+        id: filter-reachable-ips # 为此步骤设置一个ID，以便后续步骤引用其输出
+        run: |
+          reachable_ips=""
+          for ip in ${{ steps.generate-ip-list.outputs.ip_list }}; do
+            if ping -c 1 -W 1 $ip > /dev/null; then
+              reachable_ips="$reachable_ips $ip"
+            fi
+          done
+          echo "::set-output name=reachable_ips::$reachable_ips" # 将可达IP列表作为此步骤的输出
+
       - name: 在IP段上运行Dirsearch
         working-directory: ./dirsearch # 在dirsearch目录下执行
         run: |
-          ip_list="${{ steps.generate-ip-list.outputs.ip_list }}" # 获取上一步生成的IP列表
+          ip_list="${{ steps.filter-reachable-ips.outputs.reachable_ips }}" # 获取上一步生成的可达IP列表
           for ip in $ip_list; do # 遍历IP列表中的每个IP地址
             echo "正在扫描 $ip..." # 输出正在扫描的IP地址信息
             # 对每个IP地址运行Dirsearch进行扫描，明确指定要扫描的文件扩展名
