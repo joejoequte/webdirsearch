@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest # 作业运行在最新版本的Ubuntu上
     steps:
       - name: 检出仓库
-        uses: actions/checkout@v3 # 使用GitHub提供的检出Action
+        uses: actions/checkout@v3.5.3 # 使用GitHub提供的检出Action
         with:
           repository: maurosoria/dirsearch # 指定要检出的仓库
           ref: master # 检出master分支
@@ -20,12 +20,12 @@ jobs:
           # token: ${{ secrets.GITHUB_TOKEN }} # 如果仓库是私有的，需要提供认证令牌
 
       - name: 设置Python环境
-        uses: actions/setup-python@v3 # 使用GitHub提供的设置Python环境的Action
+        uses: actions/setup-python@v4 # 使用GitHub提供的设置Python环境的Action
         with:
           python-version: 3.8 # 指定Python版本为3.8
 
       - name: 缓存Python依赖
-        uses: actions/cache@v3 # 使用GitHub提供的缓存Action
+        uses: actions/cache@v4 # 使用GitHub提供的缓存Action
         with:
           path: |
             ~/.cache/pip # pip 缓存路径
@@ -39,6 +39,7 @@ jobs:
           python -m pip install --upgrade pip # 升级pip到最新版本
           pip install -r requirements.txt # 安装项目所需的依赖库
           pip install ipaddress # 安装ipaddress库，用于处理CIDR表示的IP段
+          pip install concurrent.futures # 安装concurrent.futures库，用于多线程处理
 
       - name: 生成IP列表
         id: generate-ip-list # 为此步骤设置一个ID，以便后续步骤引用其输出
@@ -46,29 +47,53 @@ jobs:
           ip_range="${{ github.event.inputs.ip_range }}" # 获取用户输入的IP段
           # 使用Python和ipaddress库生成IP段内的所有IP地址，并存储在ip_list变量中
           ips=$(python -c "import ipaddress; ip_range = ipaddress.ip_network('${ip_range}', strict=False); print(' '.join(str(ip) for ip in ip_range.hosts()))")
-          echo "::set-output name=ip_list::$ips" # 将生成的IP列表作为此步骤的输出
+          echo "ip_list=$ips" >> $GITHUB_ENV # 将生成的IP列表作为此步骤的输出
 
       - name: 过滤可达IP地址
         id: filter-reachable-ips # 为此步骤设置一个ID，以便后续步骤引用其输出
         run: |
-          reachable_ips=""
-          for ip in ${{ steps.generate-ip-list.outputs.ip_list }}; do
-            if ping -c 1 -W 1 $ip > /dev/null; then
-              reachable_ips="$reachable_ips $ip"
-            fi
-          done
-          echo "::set-output name=reachable_ips::$reachable_ips" # 将可达IP列表作为此步骤的输出
+          echo "开始过滤可达IP地址"
+          echo "${{ env.ip_list }}" | tr ' ' '\n' > all_ips.txt
+          python -c "
+import concurrent.futures
+import subprocess
+
+def is_reachable(ip):
+    result = subprocess.run(['ping', '-c', '1', '-W', '1', ip], stdout=subprocess.DEVNULL)
+    return ip if result.returncode == 0 else None
+
+with open('all_ips.txt') as f:
+    ips = f.read().splitlines()
+
+with concurrent.futures.ThreadPoolExecutor() as executor:
+    reachable_ips = list(filter(None, executor.map(is_reachable, ips)))
+
+with open('reachable_ips.txt', 'w') as f:
+    f.write(' '.join(reachable_ips))
+
+print(' '.join(reachable_ips))
+"
+          reachable_ips=$(cat reachable_ips.txt)
+          echo "reachable_ips=$reachable_ips" >> $GITHUB_ENV # 将可达IP列表作为此步骤的输出
 
       - name: 在IP段上运行Dirsearch
         working-directory: ./dirsearch # 在dirsearch目录下执行
         run: |
-          ip_list="${{ steps.filter-reachable-ips.outputs.reachable_ips }}" # 获取上一步生成的可达IP列表
-          for ip in $ip_list; do # 遍历IP列表中的每个IP地址
-            echo "正在扫描 $ip..." # 输出正在扫描的IP地址信息
-            # 对每个IP地址运行Dirsearch进行扫描，明确指定要扫描的文件扩展名
-            python3 dirsearch.py -u "http://$ip" -e php,aspx,jsp,html,js --random-agent --delay=10 --retries=3 || true
-            # 使用|| true确保即使扫描失败，脚本也会继续执行
-          done
+          echo "开始运行Dirsearch"
+          python -c "
+import concurrent.futures
+import subprocess
+
+def run_dirsearch(ip):
+    result = subprocess.run(['python3', 'dirsearch.py', '-u', f'http://{ip}', '-e', 'php,aspx,jsp,html,js', '--random-agent', '--delay=10', '--retries=3'])
+    return result
+
+with open('reachable_ips.txt') as f:
+    ips = f.read().split()
+
+with concurrent.futures.ThreadPoolExecutor() as executor:
+    results = list(executor.map(run_dirsearch, ips))
+" || true
 
       - name: 上传Dirsearch扫描结果
         uses: actions/upload-artifact@v3 # 使用GitHub提供的上传构建产物的Action
