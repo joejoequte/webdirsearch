@@ -1,0 +1,61 @@
+name: 在IP段上运行Dirsearch
+
+on:
+  workflow_dispatch:
+    inputs:
+      ip_range:
+        description: '请输入CIDR表示法的IP段（例如：192.168.1.0/24）'
+        required: true
+
+jobs:
+  dirsearch-ip-range:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v3.5.3
+        with:
+          repository: maurosoria/dirsearch
+          ref: master
+          path: dirsearch
+
+      - name: 设置Python环境
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.8
+
+      - name: 安装依赖
+        working-directory: ./dirsearch
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ipaddress
+      - name: 生成IP列表
+        id: generate-ip-list
+        run: |
+          ip_range="${{ github.event.inputs.ip_range }}"
+          ips=$(python -c "import ipaddress; ip_range = ipaddress.ip_network('${ip_range}', strict=False); print(' '.join(str(ip) for ip in ip_range.hosts()))")
+          echo "ip_list=$ips" >> $GITHUB_ENV
+      - name: 过滤可达IP地址
+        id: filter-reachable-ips
+        run: |
+          echo "${{ env.ip_list }}" | tr ' ' '\n' > all_ips.txt
+          reachable_ips=""
+          while IFS= read -r ip; do
+            if ping -c 1 -W 1 "$ip" > /dev/null; then
+              reachable_ips="$reachable_ips $ip"
+            fi
+          done < all_ips.txt
+          echo "reachable_ips=$reachable_ips" >> $GITHUB_ENV
+      - name: 在IP段上运行Dirsearch
+        working-directory: ./dirsearch
+        run: |
+          echo "${{ env.reachable_ips }}" | tr ' ' '\n' > reachable_ips.txt
+          while IFS= read -r ip; do
+            (python3 dirsearch.py -u "http://$ip" -e php,aspx,jsp,html,js --random-agent --delay=10 --retries=3 || true) &
+          done < reachable_ips.txt
+          wait
+      - name: 上传Dirsearch扫描结果
+        uses: actions/upload-artifact@v4
+        with:
+          name: dirsearch-results
+          path: ./dirsearch/reports/*.txt
