@@ -28,7 +28,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ipaddress
+          pip install ipaddress httpx
 
       - name: 生成IP列表
         id: generate-ip-list
@@ -41,12 +41,31 @@ jobs:
         id: filter-reachable-ips
         run: |
           echo "${{ env.ip_list }}" | tr ' ' '\n' > all_ips.txt
-          reachable_ips=""
-          while IFS= read -r ip; do
-            if ping -c 1 -W 1 "$ip" > /dev/null; then
-              reachable_ips="$reachable_ips $ip"
-            fi
-          done < all_ips.txt
+          python - <<EOF
+import httpx
+import asyncio
+
+async def check_ip(ip):
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f'http://{ip}', timeout=1)
+            if response.status_code == 200:
+                return ip
+    except httpx.RequestError:
+        return None
+
+async def main():
+    with open('all_ips.txt', 'r') as f:
+        ips = f.read().split()
+    reachable_ips = await asyncio.gather(*[check_ip(ip) for ip in ips])
+    reachable_ips = [ip for ip in reachable_ips if ip]
+    print(f"reachable_ips={' '.join(reachable_ips)}")
+    with open('reachable_ips.txt', 'w') as f:
+        f.write(' '.join(reachable_ips))
+
+asyncio.run(main())
+EOF
+          reachable_ips=$(cat reachable_ips.txt)
           echo "reachable_ips=$reachable_ips" >> $GITHUB_ENV
 
       - name: 在IP段上运行Dirsearch
@@ -54,9 +73,8 @@ jobs:
         run: |
           echo "${{ env.reachable_ips }}" | tr ' ' '\n' > reachable_ips.txt
           while IFS= read -r ip; do
-            (python3 dirsearch.py -u "http://$ip" -e php,aspx,jsp,html,js --random-agent --delay=10 --retries=3 || true) &
+            python3 dirsearch.py -u "http://$ip" -e php,aspx,jsp,html,js --random-agent --delay=10 --retries=3 || true
           done < reachable_ips.txt
-          wait
 
       - name: 上传Dirsearch扫描结果
         uses: actions/upload-artifact@v4
