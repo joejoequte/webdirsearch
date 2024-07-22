@@ -35,49 +35,35 @@ jobs:
         run: |
           ip_range="${{ github.event.inputs.ip_range }}"
           ips=$(python -c "import ipaddress; ip_range = ipaddress.ip_network('${ip_range}', strict=False); print(' '.join(str(ip) for ip in ip_range.hosts()))")
-          echo "ip_list=$ips" >> $GITHUB_ENV
+          echo "$ips" > /tmp/ip_list.txt
 
       - name: 过滤可达IP地址
         id: filter-reachable-ips
         run: |
-          echo "${{ env.ip_list }}" | tr ' ' '\n' > all_ips.txt
-          python - <<EOF
-import httpx
-import asyncio
-
-async def check_ip(ip):
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f'http://{ip}', timeout=1)
-            if response.status_code == 200:
-                return ip
-    except httpx.RequestError:
-        return None
-
-async def main():
-    with open('all_ips.txt', 'r') as f:
-        ips = f.read().split()
-    reachable_ips = await asyncio.gather(*[check_ip(ip) for ip in ips])
-    reachable_ips = [ip for ip in reachable_ips if ip]
-    print(f"reachable_ips={' '.join(reachable_ips)}")
-    with open('reachable_ips.txt', 'w') as f:
-        f.write(' '.join(reachable_ips))
-
-asyncio.run(main())
-EOF
-          reachable_ips=$(cat reachable_ips.txt)
+          # 将IP地址列表分行存储在临时文件中
+          cat /tmp/ip_list.txt | tr ' ' '\n' > /tmp/ip_list.txt
+          # 使用 httpx 检查可达性，并将可达的IP地址保存到临时文件
+          httpx -l /tmp/ip_list.txt -timeout 1 -threads 50 -silent -title | awk '{print $1}' > /tmp/reachable_ips.txt
+          # 输出可达IP地址列表到环境变量
+          reachable_ips=$(cat /tmp/reachable_ips.txt)
           echo "reachable_ips=$reachable_ips" >> $GITHUB_ENV
 
       - name: 在IP段上运行Dirsearch
         working-directory: ./dirsearch
         run: |
-          echo "${{ env.reachable_ips }}" | tr ' ' '\n' > reachable_ips.txt
+          echo "${{ env.reachable_ips }}" | tr ' ' '\n' > /tmp/reachable_ips.txt
           while IFS= read -r ip; do
+            echo "正在扫描 $ip..."
             python3 dirsearch.py -u "http://$ip" -e php,aspx,jsp,html,js --random-agent --delay=10 --retries=3 || true
-          done < reachable_ips.txt
+          done < /tmp/reachable_ips.txt
 
       - name: 上传Dirsearch扫描结果
         uses: actions/upload-artifact@v4
         with:
           name: dirsearch-results
           path: ./dirsearch/reports/*.txt
+
+      - name: 清理临时文件
+        run: |
+          rm -f /tmp/ip_list.txt
+          rm -f /tmp/reachable_ips.txt
