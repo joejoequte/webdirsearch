@@ -29,7 +29,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install ipaddress
-          sudo apt-get install -y parallel
 
       - name: 生成IP列表
         id: generate-ip-list
@@ -42,14 +41,22 @@ jobs:
         id: filter-reachable-ips
         run: |
           echo "${{ env.ip_list }}" | tr ' ' '\n' > all_ips.txt
-          reachable_ips=$(cat all_ips.txt | parallel -j 10 'ping -c 1 -W 1 {} > /dev/null && echo {}')
+          reachable_ips=""
+          while IFS= read -r ip; do
+            if ping -c 1 -W 1 "$ip" > /dev/null; then
+              reachable_ips="$reachable_ips $ip"
+            fi
+          done < all_ips.txt
           echo "reachable_ips=$reachable_ips" >> $GITHUB_ENV
 
       - name: 在IP段上运行Dirsearch
         working-directory: ./dirsearch
         run: |
           echo "${{ env.reachable_ips }}" | tr ' ' '\n' > reachable_ips.txt
-          cat reachable_ips.txt | parallel -j 10 "python3 dirsearch.py -u http://{} -e php,aspx,jsp,html,js --random-agent --delay=10 --retries=3 || true"
+          while IFS= read -r ip; do
+            (python3 dirsearch.py -u "http://$ip" -e php,aspx,jsp,html,js --random-agent --delay=10 --retries=3 || true) &
+          done < reachable_ips.txt
+          wait
 
       - name: 上传Dirsearch扫描结果
         uses: actions/upload-artifact@v4
