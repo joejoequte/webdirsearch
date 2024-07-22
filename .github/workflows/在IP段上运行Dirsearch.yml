@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 检出仓库
-        uses: actions/checkout@v3.5.3
+        uses: actions/checkout@v3
         with:
           repository: maurosoria/dirsearch
           ref: master
@@ -28,7 +28,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ipaddress httpx
+          pip install httpx
 
       - name: 生成IP列表
         id: generate-ip-list
@@ -40,25 +40,19 @@ jobs:
       - name: 过滤可达IP地址
         id: filter-reachable-ips
         run: |
-          # 将IP地址列表分行存储在临时文件中
           cat /tmp/ip_list.txt | tr ' ' '\n' > /tmp/ip_list.txt
-          # 使用 httpx 检查可达性，并将可达的IP地址保存到临时文件
           httpx -l /tmp/ip_list.txt -timeout 1 -threads 50 -silent -title | awk '{print $1}' > /tmp/reachable_ips.txt
-          # 输出可达IP地址列表到环境变量
-          reachable_ips=$(cat /tmp/reachable_ips.txt)
-          echo "reachable_ips=$reachable_ips" >> $GITHUB_ENV
 
       - name: 在IP段上运行Dirsearch
         working-directory: ./dirsearch
         run: |
-          echo "${{ env.reachable_ips }}" | tr ' ' '\n' > /tmp/reachable_ips.txt
           while IFS= read -r ip; do
             echo "正在扫描 $ip..."
             python3 dirsearch.py -u "http://$ip" -e php,aspx,jsp,html,js --random-agent --delay=10 --retries=3 || true
           done < /tmp/reachable_ips.txt
 
       - name: 上传Dirsearch扫描结果
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: dirsearch-results
           path: ./dirsearch/reports/*.txt
