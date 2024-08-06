@@ -1,5 +1,4 @@
-name: 运行 Dirsearch
-
+name: 单网页版
 on:
   workflow_dispatch:
     inputs:
@@ -24,12 +23,22 @@ jobs:
       with:
         python-version: '3.8'  # 指定 Python 版本
 
+    - name: 缓存 Python 包
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/dirsearch/venv/lib/python3.8/site-packages
+          ~/.cache/pip
+        key: ${{ runner.os }}-dirsearch-${{ hashFiles('dirsearch/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-dirsearch-
+
     - name: 克隆 Dirsearch 仓库
       run: |
         # 从 GitHub 克隆 Dirsearch 仓库
         git clone https://github.com/maurosoria/dirsearch.git
 
-    - name: 创建虚拟环境
+    - name: 创建虚拟环境并安装依赖
       run: |
         # 切换到 dirsearch 目录
         cd dirsearch
@@ -53,7 +62,15 @@ jobs:
         # 运行 dirsearch 扫描指定的网址
         python dirsearch.py -u $TARGET_URL -e *  # 扫描所有扩展名的路径
 
-    - name: 上传扫描结果
+    - name: 检查并上传扫描结果
+      run: |
+        # 确保 dirsearch 生成报告
+        if [ -d "dirsearch/reports" ]; then
+          echo "报告目录存在，准备上传"
+        else
+          echo "报告目录不存在，请检查 dirsearch 配置"
+          exit 1
+        fi
       uses: actions/upload-artifact@v3
       with:
         name: dirsearch-results
