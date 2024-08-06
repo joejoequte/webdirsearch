@@ -1,0 +1,54 @@
+name: 运行 Dirsearch
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: '需要扫描的目标网址'
+        required: true
+        default: 'http://example.com'
+        type: string
+
+jobs:
+  run-dirsearch:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 检出代码库
+      uses: actions/checkout@v3
+      with:
+        submodules: true  # 如果有子模块，确保一并检出
+
+    - name: 设置 Python 环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.8'  # 指定 Python 版本
+
+    - name: 安装依赖项
+      run: |
+        # 更新系统包
+        sudo apt-get update
+        # 安装 git
+        sudo apt-get install -y git
+        # 安装 Python 依赖项
+        pip install -r dirsearch/requirements.txt
+
+    - name: 克隆 Dirsearch 仓库
+      run: |
+        # 从 GitHub 克隆 Dirsearch 仓库
+        git clone https://github.com/maurosoria/dirsearch.git
+
+    - name: 运行 Dirsearch
+      env:
+        TARGET_URL: ${{ github.event.inputs.url }}  # 使用输入的目标网址
+      run: |
+        # 切换到 dirsearch 目录
+        cd dirsearch
+        # 运行 dirsearch 扫描指定的网址
+        python3 dirsearch.py -u $TARGET_URL -e *  # 扫描所有扩展名的路径
+
+    - name: 上传扫描结果
+      uses: actions/upload-artifact@v3
+      with:
+        name: dirsearch-results
+        path: dirsearch/reports/  # 上传扫描结果文件夹
