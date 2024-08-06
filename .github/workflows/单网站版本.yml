@@ -1,4 +1,5 @@
-name: 单网页版
+name: 运行 Dirsearch
+
 on:
   workflow_dispatch:
     inputs:
@@ -62,15 +63,17 @@ jobs:
         # 运行 dirsearch 扫描指定的网址
         python dirsearch.py -u $TARGET_URL -e *  # 扫描所有扩展名的路径
 
-    - name: 检查并上传扫描结果
+    - name: 检查报告目录
       run: |
-        # 确保 dirsearch 生成报告
+        # 检查 dirsearch 是否生成了报告
         if [ -d "dirsearch/reports" ]; then
           echo "报告目录存在，准备上传"
         else
           echo "报告目录不存在，请检查 dirsearch 配置"
           exit 1
         fi
+
+    - name: 上传扫描结果
       uses: actions/upload-artifact@v3
       with:
         name: dirsearch-results
