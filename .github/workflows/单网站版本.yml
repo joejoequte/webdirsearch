@@ -62,7 +62,7 @@ jobs:
         cd dirsearch
         # 运行 dirsearch 扫描指定的网址，使用较为常见的扩展名作为测试
         echo "开始扫描目标网址: $TARGET_URL"
-        python dirsearch.py -u $TARGET_URL -e html,php,asp,aspx,jsp,txt  # 使用常见扩展名
+        python dirsearch.py -u $TARGET_URL -e html,php,asp,aspx,jsp,js -t 100 -r 5 -x 403  # 使用常见扩展名
 
     - name: 检查报告目录
       run: |
