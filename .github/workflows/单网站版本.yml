@@ -60,8 +60,9 @@ jobs:
         source dirsearch/venv/bin/activate
         # 切换到 dirsearch 目录
         cd dirsearch
-        # 运行 dirsearch 扫描指定的网址
-        python dirsearch.py -u $TARGET_URL -e *  # 扫描所有扩展名的路径
+        # 运行 dirsearch 扫描指定的网址，使用较为常见的扩展名作为测试
+        echo "开始扫描目标网址: $TARGET_URL"
+        python dirsearch.py -u $TARGET_URL -e html,php,asp,aspx,jsp,txt  # 使用常见扩展名
 
     - name: 检查报告目录
       run: |
