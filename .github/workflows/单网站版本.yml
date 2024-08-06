@@ -1,4 +1,4 @@
-name: 单网站版本
+name: 运行 Dirsearch
 
 on:
   workflow_dispatch:
@@ -24,27 +24,34 @@ jobs:
       with:
         python-version: '3.8'  # 指定 Python 版本
 
-    - name: 缓存 Dirsearch 仓库
-      uses: actions/cache@v3
-      with:
-        path: dirsearch  # 缓存 dirsearch 目录
-        key: ${{ runner.os }}-dirsearch-${{ github.sha }}  # 缓存键值，以当前提交的 SHA 作为唯一标识
-        restore-keys: |
-          ${{ runner.os }}-dirsearch-
-
     - name: 克隆 Dirsearch 仓库
       run: |
         # 从 GitHub 克隆 Dirsearch 仓库
         git clone https://github.com/maurosoria/dirsearch.git
 
+    - name: 创建虚拟环境
+      run: |
+        # 切换到 dirsearch 目录
+        cd dirsearch
+        # 创建虚拟环境
+        python3 -m venv venv
+        # 激活虚拟环境
+        source venv/bin/activate
+        # 升级 pip 和 setuptools
+        pip install --upgrade pip setuptools
+        # 安装 dirsearch 的依赖项
+        pip install -r requirements.txt
+
     - name: 运行 Dirsearch
       env:
         TARGET_URL: ${{ github.event.inputs.url }}  # 使用输入的目标网址
       run: |
+        # 激活虚拟环境
+        source dirsearch/venv/bin/activate
         # 切换到 dirsearch 目录
         cd dirsearch
         # 运行 dirsearch 扫描指定的网址
-        python3 dirsearch.py -u $TARGET_URL -e *  # 扫描所有扩展名的路径
+        python dirsearch.py -u $TARGET_URL -e *  # 扫描所有扩展名的路径
 
     - name: 上传扫描结果
       uses: actions/upload-artifact@v3
